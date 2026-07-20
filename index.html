@@ -186,7 +186,7 @@ header{background:var(--ink);color:var(--paper);padding:1.1rem 2rem;display:flex
 <script>
 const CLUES=[{"id":1,"word":"DERIVADA","clue":"Concepto matemático que se utiliza para calcular la pendiente de la recta tangente a una curva en un punto contenido en esta."},{"id":2,"word":"CONTINUA","clue":"Tipo de función cuyo límite alrededor de un punto es igual al valor de la imagen en dicho punto."},{"id":3,"word":"UTILIDAD","clue":"Función que se obtiene de restar los costos a los ingresos."},{"id":4,"word":"PERCAPITA","clue":"Nombre que reciben los ingresos al dividir los ingresos netos por la población."},{"id":5,"word":"LATERALES","clue":"Nombre de los límites que se calculan a través de aproximaciones para valores que son únicamente mayores al valor de tendencia o únicamente menores al valor de tendencia."},{"id":6,"word":"LIMITE","clue":"Concepto que describe el valor al que se aproxima una función cuando la variable independiente se acerca a un punto determinado."},{"id":7,"word":"HORIZONTAL","clue":"Tipo de asíntota que se genera cuando el límite de una función real evaluado al infinito converge a un número real."},{"id":8,"word":"VERTICAL","clue":"Tipo de asíntota que se genera cuando el límite evaluado alrededor de un valor real da infinito como resultado."},{"id":9,"word":"REGLADELACADENA","clue":"Regla de derivación donde se multiplica la derivada de la función externa por la derivada de la función interna."},{"id":10,"word":"INFINITO","clue":"Resultado que da un límite cuando el valor al que tiende el denominador es cero."},{"id":11,"word":"RACIONALIZACION","clue":"Técnica que se aplica para resolver límites de la forma 0/0 con raíces."},{"id":12,"word":"DIVERGE","clue":"Cuando un límite no existe porque da infinito se dice que ese límite:"},{"id":13,"word":"NOEXISTE","clue":"Cuando los límites laterales no coinciden, se dice que el límite:"},{"id":14,"word":"INDETERMINADO","clue":"Forma que toma un límite cuando al sustituir directamente se obtiene 0/0 o ∞/∞."},{"id":15,"word":"SUSTITUCION","clue":"Primera técnica que se intenta al calcular un límite."},{"id":16,"word":"DISCONTINUIDAD","clue":"Característica de una función en un punto donde el límite no coincide con el valor de la función."}];
 const PTS=10;
-const SCRIPT_URL="https://script.google.com/macros/s/AKfycbzcZFJKv-ktLsGxPnNVV78Lc2eecZJ_fo5_uLwAnku7qde_X7wXmzUb-PkzdLjqzht-Lg/exec";
+const SCRIPT_URL="https://script.google.com/macros/s/AKfycbymIokB85aiNyiKgqer6Xs8H2Y8oJ00sa2Q1PXsQ3qvxZ_wZpf1r87MIBYy35r9lzVTBw/exec";
 const CURSO="Matemática 2";
 const CURSO_CORTO = {
   'Introducción al Cálculo': 'Intro',
@@ -207,9 +207,7 @@ function startTimer(){
   document.getElementById('timer-box').style.display = 'flex';
   updateTimerDisplay();
   timerInterval = setInterval(()=>{
-    // Always calculate from real wall-clock time so salir/volver doesn't cheat
-    const elapsed = Math.floor((Date.now() - studentData.startedAt) / 1000);
-    secondsLeft = Math.max(0, TIME_LIMIT - elapsed);
+    secondsLeft--;
     updateTimerDisplay();
     if(secondsLeft % 10 === 0) saveState();
     if(secondsLeft <= 0){
@@ -402,27 +400,23 @@ function startActivity(){
   // Query Sheets to restore previous progress (works on any browser)
   const restoreAndLaunch = (answered) => {
     if(answered && Object.keys(answered).length > 0){
-      // Match P1,P2,... to activeClues by position
       activeClues.forEach((item, idx) => {
         const key = 'P'+(idx+1);
         const cell = answered[key];
         if(!cell || cell==='—') return;
         const state = answers[item.displayId];
         if(cell.includes('✓')){
-          // Correct answer
-          const attempt = cell.replace(' ✓','').trim();
+          const attempt = cell.replace(' ✓','').split(' → ').pop().trim();
           state.correct=true;
           state.attemptsUsed=1;
           state.attempts=[attempt];
         } else if(cell.includes('✗')){
-          // Failed all attempts
           state.attemptsUsed=2;
-          const parts = cell.split(' ✗')[0].split(' → ');
-          state.attempts=parts;
-        } else if(cell.includes(' → ')){
-          // One attempt used, still going
+          const intentsPart = cell.split(' ✗')[0];
+          state.attempts = intentsPart.split(' → ').map(s=>s.trim());
+        } else {
           state.attemptsUsed=1;
-          state.attempts=[cell.split(' → ')[0].trim()];
+          state.attempts = cell.split(' → ').map(s=>s.trim());
         }
       });
       studentData.sessionCount = 2;
@@ -442,6 +436,8 @@ function startActivity(){
     renderGrid();renderClues();updateProgress();
     startTimer();
     show('screen-puzzle');
+    // Register student immediately even before answering
+    setTimeout(()=>syncProgress('progreso'), 1500);
   };
 
   // Try to fetch previous answers from Sheets
@@ -633,11 +629,7 @@ function calcScore(){
 // Builds the progress payload and sends it to Sheets (fire-and-forget)
 function syncProgress(tipo='progreso', score=null){
   if(!SCRIPT_URL) return;
-  // Calculate real elapsed time using timestamp, not countdown
-  const realElapsed = studentData.startedAt
-    ? Math.floor((Date.now() - studentData.startedAt) / 1000)
-    : (TIME_LIMIT - secondsLeft);
-  const segundosUsados = Math.min(realElapsed, TIME_LIMIT);
+  const segundosUsados = Math.min(TIME_LIMIT - secondsLeft, TIME_LIMIT);
   const mm = Math.floor(segundosUsados/60);
   const ss2 = segundosUsados%60;
   const tiempoUsado = String(mm).padStart(2,'0')+':'+String(ss2).padStart(2,'0');
@@ -658,7 +650,6 @@ function syncProgress(tipo='progreso', score=null){
     tipo,
     nombre:       studentData.nombre,
     sesion:       studentData.sessionCount || 1,
-    sessionId:    studentData.startedAt,
     dia:          studentData.dia,
     horario:      studentData.horario,
     curso:        CURSO,
